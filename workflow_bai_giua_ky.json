@@ -1,0 +1,206 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {
+          "download": true
+        }
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "e91d3307-7eea-44c4-bbe3-026bbf641fcc",
+      "name": "Telegram Trigger",
+      "webhookId": "5d41ca51-6daa-4935-81c9-1a12db9f0726",
+      "credentials": {
+        "telegramApi": {
+          "id": "e8wjUAxTzz8eD2bs",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nlet results = [];\n\nfor (let item of items) {\n  // 1. Xử lý caption -> tên file an toàn\n  const caption = item.json.message?.caption || \"chinh_sua_anh\";\n  const safeName = caption.normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '') \n    .replace(/[^a-zA-Z0-9 ]/g, \"\")   \n    .replace(/\\s+/g, \"_\")            \n    .toLowerCase();\n\n  // 2. Đóng gói kết quả truyền đi (Bao gồm cả JSON và BINARY)\n  results.push({\n    json: {\n      prompt: caption,\n      fileName: safeName + \".png\",\n      chatId: item.json.message?.chat?.id\n    },\n    binary: item.binary  // <-- DÒNG QUAN TRỌNG NHẤT: Giữ lại ảnh gốc để truyền tiếp!\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "e6f9de4c-a13e-4042-ac9e-467198d18ae3",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.stability.ai/v2beta/stable-image/generate/ultra",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "image/*"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "=={{ $json.prompt }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "image",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "strength",
+              "value": "0.5"
+            },
+            {
+              "name": "output_format",
+              "value": "png"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "09237cec-b932-42f6-ac96-86daa49b3d1e",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YRLAw39U00rOtpfl",
+          "name": "Hugging Face API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "=={{ $node[\"Code in JavaScript\"].json.fileName }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "=1XWFBUwFTB3G9vpInzkN0EYrW8M0jFm94",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        624,
+        0
+      ],
+      "id": "ecce3fc8-fb4c-47f8-b8ad-76ae569674fb",
+      "name": "Upload file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "nKk3YOp16iEdI3mz",
+          "name": "My Google Drive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "=✅ Đã xử lý xong ảnh! Tên file lưu trên Drive: {{ $node[\"Code in JavaScript\"].json.fileName }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "01112e2f-8fa0-490a-9866-88a668bebf4c",
+      "name": "Send a text message",
+      "webhookId": "facaf36a-90d3-4456-9eeb-b03e27924b70",
+      "credentials": {
+        "telegramApi": {
+          "id": "e8wjUAxTzz8eD2bs",
+          "name": "Telegram account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Upload file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload file": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4497d12a8152dc71d16c1485a23f10a497a0f2ec35738b2423464c79c682b76c"
+  }
+}
